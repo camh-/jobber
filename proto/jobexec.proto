@@ -1,0 +1,124 @@
+syntax = "proto3";
+
+import "google/protobuf/timestamp.proto";
+
+// JobExecutor is a service for running programs on the server hosting the
+// service. It supports running jobs with a simple level of resource control
+// and namespace limiting, and streams back the output of those jobs.
+service JobExecutor {
+  rpc Run(RunRequest) returns (RunResponse);
+  rpc Stop(StopRequest) returns (StopResponse);
+  rpc List(ListRequest) returns (ListResponse);
+  rpc Status(StatusRequest) returns (StatusResponse);
+  rpc Logs(LogsRequest) returns (stream LogsResponse);
+}
+
+message JobSpec {
+  // command is a full path to the program to be executed for the job.
+  // $PATH is not searched for the command.
+  string command = 1;
+
+  // arguments is the argument vector given to the process when it is run.
+  // The first argument should be the name of the program, not what is
+  // typically known as the first argument to the program.
+  repeated string arguments = 2;
+
+  // resources specify resource constraints for running the job. Default
+  // resource constraints may be applied if this field is not provided.
+  Resources resources = 3;
+
+  // root_dir is a directory that is set as the root directory in the
+  // filesystem namespace in which the job runs. If it is empty, the job
+  // runs in the the same filesystem namespace as the program executing
+  // the job.
+  string root_dir = 4;
+
+  // isolate_network runs the job in a network namespace with no network
+  // interfaces, preventing any network communication.
+  bool isolate_network = 5;
+}
+
+message Resources {
+  // milli_cpu is the amount of CPU available to the job when there is CPU
+  // contention. 1000 mCPU means 1 full CPU is available to the job.
+  uint32 milli_cpu = 1;
+
+  // memory is the amount of RAM made available to the job. A job exceeding
+  // this amount may be killed by the kernel.
+  uint64 memory = 2;
+
+  // io_limits is the input/output bandwidth limits for block devices.
+  repeated DiskIOLimit io_limits = 3;
+
+  // max_processes is the maximum number of processes the job can run
+  // concurrently, including itself.
+  uint32 max_processes = 4;
+}
+
+message DiskIOLimit {
+  // device is a block device node in the filesystem (e.g. /dev/sda) that
+  // the limits are on.
+  string device = 1;
+
+  // read_bps is the maximum read rate in bytes per second
+  uint64 read_bps = 2;
+
+  // write_bps is the maximum write rate in bytes per second
+  uint64 write_bps = 3;
+
+  // read_iops is the maximum number of read i/o operations per second
+  uint32 read_iops = 4;
+
+  // write_iops is the maximum number of write i/o operations per second
+  uint32 write_iops = 5;
+}
+
+message JobStatus {
+  uint32 job_id = 1;
+  google.protobuf.Timestamp start_time = 2;
+  string user = 3;
+  enum JobState {
+    JOBSTATE_INVALID = 0;
+    JOBSTATE_RUNNING = 1;
+    JOBSTATE_COMPLETED = 2;
+  }
+  JobState state = 4;
+  JobSpec spec = 5;
+}
+
+message RunRequest {
+  JobSpec spec = 1;
+}
+
+message RunResponse {
+  uint32 job_id = 1;
+  string error = 2;
+}
+
+message StopRequest {
+  uint32 job_id = 1;
+  bool cleanup = 2;
+}
+
+message StopResponse {}
+
+message ListRequest {}
+
+message ListResponse {
+  repeated JobStatus jobs = 1;
+}
+
+message StatusRequest {
+  JobStatus status = 1;
+}
+
+message StatusResponse {}
+
+message LogsRequest {
+  uint32 job_id = 1;
+}
+
+message LogsResponse {
+  google.protobuf.Timestamp timestamp = 1;
+  string line = 2;
+}
