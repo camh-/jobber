@@ -51,15 +51,26 @@ setting up the group and executing the program.
 A `Job` will support getting the output stream of it captured from the start of
 the job. Multiple output streams of the same job are independent and stream the
 same output. Each line of output is timestamped with the time the line was read
-from the job.
+from the job. The length of a line is capped where there is no newline before
+the maximum length. This maximum length will initially be 512 bytes but may be
+revised.
 
-The ID of a Job will be the process ID of the first process of the job. This ID
-can be used with the `jobtracker` to look up jobs so the status can be queried,
-output streamed back or to stop the job. On Linux, the PID space wraps around at
-2^22, which gives a reasonable amount of room before wrap-around and PID reuse.
-A more robust system would not reuse IDs, but in this case PIDs are handy as
-they are useful to use outside of the server too to check it is running
-properly.
+A successfully started job will be assigned a job ID comprising the basename of
+the job's command (basename being the part after the last slash) and a random 8
+hex digit suffix. It will be unique amongst all tracked jobs. Jobs are tracked
+after they have exited so as to retain the exit code and the output, but can be
+cleaned up and removed from being tracked as requested. The job ID can be used
+with the `jobtracker` to look up job status and output.
+
+In the library, a job ID will be a Go `string`, but it may not be utf-8 encoded
+as there is no such requirement on filenames in the filesystem and as the name
+of the command is used in the ID, it cannot be guaranteed to be utf-8. In the
+protobuf spec, the type will be `bytes` as a protobuf `string` must be utf-8
+encoded.
+
+The running jobs, exited job statuses and job output are not stored
+persistently. If the process running the jobs restarts, it will restart with
+empty state.
 
 #### Resource Limits
 
@@ -106,6 +117,9 @@ the [Service Authentication](#service-authentication) below for more details.
 Any program that the server is requested to run must already exist on the
 machine where the server is running. The server will not download any files
 (such as `docker run` does when pulling an image).
+
+Errors from the execution of any gRPC methods will be returned to the gRPC
+client using a gRPC error status response.
 
 ### CLI
 

@@ -74,7 +74,7 @@ message DiskIOLimit {
 }
 
 message JobStatus {
-  uint32 job_id = 1;
+  bytes job_id = 1;
   google.protobuf.Timestamp start_time = 2;
   string user = 3;
   enum JobState {
@@ -83,7 +83,8 @@ message JobStatus {
     JOBSTATE_COMPLETED = 2;
   }
   JobState state = 4;
-  JobSpec spec = 5;
+  uint32 exit_code = 5;
+  JobSpec spec = 6;
 }
 
 message RunRequest {
@@ -91,34 +92,51 @@ message RunRequest {
 }
 
 message RunResponse {
-  uint32 job_id = 1;
-  string error = 2;
+  bytes job_id = 1;
 }
 
 message StopRequest {
-  uint32 job_id = 1;
+  bytes job_id = 1;
+
+  // cleanup specifies that the job be removed from tracking. After completion
+  // of a cleanup stop request, the job_id will no longer be valid, and status
+  // and stored output will be discarded by the server.
   bool cleanup = 2;
 }
 
 message StopResponse {}
 
-message ListRequest {}
+message ListRequest {
+  // all_job requests that a user with admin authorization list all users jobs
+  // and not just their own.
+  bool all_jobs = 1;
+}
 
 message ListResponse {
   repeated JobStatus jobs = 1;
 }
 
 message StatusRequest {
+  bytes job_id = 1;
+}
+
+message StatusResponse {
   JobStatus status = 1;
 }
 
-message StatusResponse {}
-
 message LogsRequest {
-  uint32 job_id = 1;
+  bytes job_id = 1;
 }
 
 message LogsResponse {
+  // timestamp is the time the log line was captured.
   google.protobuf.Timestamp timestamp = 1;
-  string line = 2;
+
+  // line is a line of output from a job, including the trailing newline.
+  // The length is capped at 512 bytes; lines longer than that are split
+  // into multiple LogsReponse messages. Split lines will not have a newline
+  // within it. Purely binary output from a job will appear as multiple
+  // 512-byte chunks, although a newline character in the binary stream may
+  // cause a short block.
+  bytes line = 2;
 }
