@@ -9,8 +9,9 @@ state: draft
 
 A remotely-accessible service for running jobs on a host and streaming output
 from the jobs to a client. Resources and namespaces for jobs can be constrained
-via the Linux cgroups API. Clients are authenticated with mutual-TLS, where the
-client certificate asserts the user's identity used for authorization.
+via the Linux cgroups API and the clone(2) namespace flags. Clients are
+authenticated with mutual-TLS, where the client certificate asserts the user's
+identity used for authorization.
 
 ## Why
 
@@ -34,33 +35,37 @@ The library consists of two primary packages: `job` and `jobtracker`.
 
 The purpose of the `job` package is to represent a single running job, allowing
 it to be created, watched, stopped and reaped. It exists as a simple reusable
-component for programs that want to run individual jobs within a cgroup.
+component for programs that want to run individual jobs within a container (a
+container being a cgroup and namespaces).
 
 The `jobtracker` maintains a set of `job`s, allowing known jobs to be listed and
 individual jobs to be looked up by an ID so that the job can be operated upon.
 
-Executing a job in a cgroup will be a two-step process as it is problematic to
-fork in Go, and the typical approach to using groups is to fork, set up the
-cgroup and then execute the binary to run in that cgroup. Instead, the library
-will allow a pluggable executor that can run a program as a child process that
-sets up the cgroup and then execs the program. The executor can just run
-`/proc/self/exe` with an argument list that can be parsed into a `JobSpec`
-struct and passed back into the `job` package, which will then take care of
-setting up the group and executing the program.
+Executing a job in a container will be a two-step process as it is problematic
+to fork in Go, and the typical approach to using groups is to fork, set up the
+container and then execute the binary to run in that container. Instead, the
+library will allow a pluggable executor that can run a program as a child
+process that sets up the container and then execs the program. The executor can
+just run `/proc/self/exe` with an argument list that can be parsed into a
+`JobSpec` struct and passed back into the `job` package, which will then take
+care of setting up the group and executing the program.
 
-A `Job` will support getting the output stream of it captured from the start of
-the job. Multiple output streams of the same job are independent and stream the
-same output. Each line of output is timestamped with the time the line was read
-from the job. The length of a line is capped where there is no newline before
-the maximum length. This maximum length will initially be 512 bytes but may be
-revised.
+A `Job` will support getting the combined stdout and stderr output stream of it
+captured from the start of the job. Multiple output streams requested of the
+same job are independent and stream the same output. The stream comprises lines
+with a maximum length of 512 bytes (size subject to revision). If a line is
+longer than that, either because it is a long line of text or if the output is
+binary data, it will be split into chunks. Each line/chunk has a timestamp of
+when the first byte of it was read from the job. A library client may
+reconstruct the output by ignoring timestamps and concatenating elements of the
+output stream.
 
 A successfully started job will be assigned a job ID comprising the basename of
 the job's command (basename being the part after the last slash) and a random 8
-hex digit suffix. It will be unique amongst all tracked jobs. Jobs are tracked
-after they have exited so as to retain the exit code and the output, but can be
-cleaned up and removed from being tracked as requested. The job ID can be used
-with the `jobtracker` to look up job status and output.
+hex digit suffix. It will be unique amongst all tracked jobs of a `jobtracker`.
+Jobs are tracked after they have exited so as to retain the exit code and the
+output, but can be cleaned up and removed from being tracked as requested. The
+job ID can be used with the `jobtracker` to look up job status and output.
 
 In the library, a job ID will be a Go `string`, but it may not be utf-8 encoded
 as there is no such requirement on filenames in the filesystem and as the name
@@ -92,12 +97,16 @@ enhancement.
 
 A job can be run under a filesystem root to prevent the job accessing any files
 outside of that directory hierarchy. By default, a job runs in the same
-filesystem namespace as the process running the job.
+filesystem namespace as the process running the job, apart from `/proc` which is
+per-job. This will be implemented by putting each job in its own mount
+namespace. Where a distinct filesystem root is not specified, `/proc` in the
+container will overlay `/proc` of the host.
 
-A job may be run isolated from the network with no network interfaces. Multiple
-levels of future enhancement are possible here: run with just a loopback device,
-set up network overlays and attach jobs to particular overlays, etc. None of
-these will be in the initial implementation.
+A job may be run isolated from the network with no network interfaces or may
+share all the host's network interfaces. Subsequent iterations of this project
+may add the ability to specify which network interfaces should be in the
+container. It is not planned to add any network overlay capability through veth
+or tun/tap devices such as is available with Kubernetes.
 
 Every job runs in its own PID namespace - that is, it cannot see any process but
 itself and its children, and the PIDs it can see are independent of others on

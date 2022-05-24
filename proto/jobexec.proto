@@ -19,8 +19,8 @@ message JobSpec {
   string command = 1;
 
   // arguments is the argument vector given to the process when it is run.
-  // The first argument should be the name of the program, not what is
-  // typically known as the first argument to the program.
+  // The first argument should be the name of the command followed by the
+  // arguments to the command.
   repeated string arguments = 2;
 
   // resources specify resource constraints for running the job. Default
