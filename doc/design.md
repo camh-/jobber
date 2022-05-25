@@ -65,9 +65,8 @@ same job are independent and stream the same output. The stream comprises lines
 with a maximum length of 512 bytes (size subject to revision). If a line is
 longer than that, either because it is a long line of text or if the output is
 binary data, it will be split into chunks. Each line/chunk has a timestamp of
-when the first byte of it was read from the job. A library client may
-reconstruct the output by ignoring timestamps and concatenating elements of the
-output stream.
+when it was read from the job. A library client may reconstruct the output by
+ignoring timestamps and concatenating elements of the output stream.
 
 A successfully started job will be assigned a job ID comprising the basename of
 the job's command (basename being the part after the last slash) and a random 8
@@ -91,6 +90,51 @@ within a grace period of 10 seconds (an arbitrary timeout initially, extendable
 via a stop parameter in future), it will be sent SIGKILL signal. A future
 enhancement would be to kill all processes in the PID namespace, rather than
 leaving it up to the top process of the hierarchy to propagate the signal.
+
+#### Output streaming
+
+The output of a job is its stdout and stderr streams. These will both be
+connected to the same pipe that will be set up before the job executor is
+called. This will collect the interleaved output of both these streams. Where
+the streams are interleaved is up to the job itself and exactly when it writes
+to each of stdout and stderr. A typical setup of the standard C library is to
+buffer stdout but not stderr, so it may be that the output of the job is not
+received in the order that the application code of the job writes it. There is
+not much to be done about this - we cannot see the contents of an
+application-level buffer.
+
+The server library will contain a "log distributor" that is responsible for
+reading the pipe from the job, storing it in a buffer and feeding it to any
+client that is streaming the output of that job. Each job has a single log
+distributor.
+
+A "reader" goroutine will read from the pipe attached to stdout/stderr of the
+job splitting the input into lines with a maximum size of 512 bytes. It will
+attach a timestamp to that line marking the time the line was read, as described
+above. For each line, it will send that on a channel to a "distributor" goroutine.
+
+A "distributor" goroutine is responsible for reading the logs from the reader
+goroutine and storing them in an in-memory buffer. It also accepts any number of
+"writer" channels to stream out the logs. The distributor owns the logs buffer
+and is the only goroutine that reads or writes to the buffer.
+
+Each `LogsRequest` from a client attaches to the distributor and provides a
+channel for the distributor to send logs to. The distributor maintains a set of
+all connected clients and a cursor position of which line each is up to. As a
+client channel becomes ready, the next line is sent on the channel to that
+client. The client, running in its own goroutine, will receive from the channel
+and issue a gRPC `SendMesg()` to stream that log back to the client.
+
+If a client is following the logs (that is, we do not disconnect it after the
+last line is sent, instead continuously streaming logs as they are generated),
+and that client reaches the end, it will be temporarily disabled until more logs
+are received from the job, at which point it will be re-enabled.
+
+A slow client unable to receive at the same rate as other clients will not block
+those other clients. Each client channel will only become ready for sending when
+the client goroutine receives on that channel. In the mean time, other client
+channels can become ready and receive logs. This also will not block the reader
+goroutine.
 
 #### Resource Limits
 
