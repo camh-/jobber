@@ -42,13 +42,22 @@ The `jobtracker` maintains a set of `job`s, allowing known jobs to be listed and
 individual jobs to be looked up by an ID so that the job can be operated upon.
 
 Executing a job in a container will be a two-step process as it is problematic
-to fork in Go, and the typical approach to using groups is to fork, set up the
-container and then execute the binary to run in that container. Instead, the
-library will allow a pluggable executor that can run a program as a child
-process that sets up the container and then execs the program. The executor can
-just run `/proc/self/exe` with an argument list that can be parsed into a
-`JobSpec` struct and passed back into the `job` package, which will then take
-care of setting up the group and executing the program.
+to fork in Go, and the typical approach to using cgroups and namespaces is to
+fork, set up the container and then execute the binary to run in that container.
+Instead, the library will allow a pluggable executor that can run a program as a
+child process that sets up the container and then execs the program.
+
+The executor will be given a job specification containing the cgroup and
+namespace parameters, command and arguments and any other setup required for the
+job. It should spawn a child process in new namespaces where appropriate
+(using the `CLONE_*` flags) and pass the job specification via the command line.
+It then re-creates the job specification from the command line and calls back
+into the `job` library to complete the execution of the job.
+
+Typically the executor will just run `/proc/self/exe` and the user of the
+library will implement command line flags for re-creating the job specification
+to pass back to the library, but it could run an entirely different program that
+executes the job specification if so desired.
 
 A `Job` will support getting the combined stdout and stderr output stream of it
 captured from the start of the job. Multiple output streams requested of the
@@ -77,6 +86,12 @@ The running jobs, exited job statuses and job output are not stored
 persistently. If the process running the jobs restarts, it will restart with
 empty state.
 
+When a job is stopped, it will be sent a SIGTERM signal. If it has not exited
+within a grace period of 10 seconds (an arbitrary timeout initially, extendable
+via a stop parameter in future), it will be sent SIGKILL signal. A future
+enhancement would be to kill all processes in the PID namespace, rather than
+leaving it up to the top process of the hierarchy to propagate the signal.
+
 #### Resource Limits
 
 Certain resource limits can be specified when running a job and are controlled
@@ -103,14 +118,20 @@ namespace. Where a distinct filesystem root is not specified, `/proc` in the
 container will overlay `/proc` of the host.
 
 A job may be run isolated from the network with no network interfaces or may
-share all the host's network interfaces. Subsequent iterations of this project
-may add the ability to specify which network interfaces should be in the
-container. It is not planned to add any network overlay capability through veth
-or tun/tap devices such as is available with Kubernetes.
+share all the host's network interfaces - essentially the job runs with either
+an empty network namespace or shares the network namespace of the job executor.
 
 Every job runs in its own PID namespace - that is, it cannot see any process but
 itself and its children, and the PIDs it can see are independent of others on
 the system.
+
+Subsequent iterations of this project may add the ability to specify which
+network interfaces should be in the container. It is not planned to add any
+network overlay capability through veth or tun/tap devices such as is available
+with Kubernetes. The mount namespace may be extended by modelling a volume
+concept to allow different storage and data to be mounted at different places in
+the job's filesystem namespace. None of this will be done for the initial
+implementation.
 
 ### Server/API
 
@@ -206,6 +227,14 @@ client key can access the service.
 
 Plaintext connection will not be accepted. Every connection to the service must
 use TLS.
+
+The CLI client will be able to be told to use a CA certificate bundle for
+validating the server certificate. If not specified, the default system trust
+store will be used (e.g. `/etc/ssl/certs` on Debian-based systems), as is the
+default when no CA certificate trust store is provided.
+
+If the client cannot validate the server certificate, it will terminate the
+connection without sending any requests.
 
 #### Authorization
 
