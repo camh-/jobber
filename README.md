@@ -19,6 +19,12 @@ are done, run:
 
     deactivate-hermit
 
+Once the hermit environment is activated, you can run `make help` to see the
+`make` targets available. Alternatively, you can run `bin/make help` without
+activating hermit, or if you already have `make` installed globally on your
+system, you can run `make help` and the Makefile will activate hermit for the
+duration of the make targets executed, using the tools in the `bin/` directory.
+
 [Hermit]: https://github.com/cashapp/hermit
 
 ## Design
