@@ -14,6 +14,15 @@ clean::  ## Remove generated files not to be committed
 
 .PHONY: all check-uptodate ci clean
 
+# --- Protobuf -----------------------------------------------------------------
+
+proto:  ## Generate Go pb and grpc bindings for .proto files
+	protoc -I proto proto/jobexec.proto \
+		--go_out=paths=source_relative:pb \
+		--go-grpc_out=paths=source_relative:pb
+
+.PHONY: proto
+
 # --- Utilities ----------------------------------------------------------------
 COLOUR_NORMAL = $(shell tput sgr0 2>/dev/null)
 COLOUR_WHITE  = $(shell tput setaf 7 2>/dev/null)

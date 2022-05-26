@@ -2,6 +2,8 @@ syntax = "proto3";
 
 import "google/protobuf/timestamp.proto";
 
+option go_package = "github.com/camh-/jobber/pb";
+
 // JobExecutor is a service for running programs on the server hosting the
 // service. It supports running jobs with a simple level of resource control
 // and namespace limiting, and streams back the output of those jobs.
