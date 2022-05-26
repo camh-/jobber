@@ -2,6 +2,17 @@
 
 This repository contains my [Teleport interview challenge](doc/challenge.md).
 
+## Continuous integration
+
+This repository uses Github actions for continuous integration on pull requests
+and merges to master. Actions taken by CI are defined in the `Makefile` and can
+be run locally by running `make ci`. You will need to ensure you have a clean
+working directory as a dirty working directory can interfere with the up-to-date
+checks for generated files that get committed to the repository. This is most
+easily done with `git stash push -u`.
+
+## Requirements
+
 [Hermit] is used to manage any build tools required to use this repository.
 Hermit self-installs and it installs any tools when they are first used or when
 they are upgraded.

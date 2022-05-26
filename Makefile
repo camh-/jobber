@@ -2,6 +2,18 @@
 
 .DEFAULT_GOAL = help
 
+# --- CI -----------------------------------------------------------------------
+
+ci: clean check-uptodate all  ## Full clean, build and up-to-date checks for CI
+
+all:  ## Nothing yet. Will be build, test, check coverage and lint
+
+check-uptodate:  ## Check that committed generated files are up-to-date
+
+clean::  ## Remove generated files not to be committed
+
+.PHONY: all check-uptodate ci clean
+
 # --- Utilities ----------------------------------------------------------------
 COLOUR_NORMAL = $(shell tput sgr0 2>/dev/null)
 COLOUR_WHITE  = $(shell tput setaf 7 2>/dev/null)
