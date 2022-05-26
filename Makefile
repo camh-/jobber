@@ -4,15 +4,27 @@
 
 # --- CI -----------------------------------------------------------------------
 
+REQUIRE_UPTODATE =
+
 ci: clean check-uptodate all  ## Full clean, build and up-to-date checks for CI
 
 all:  ## Nothing yet. Will be build, test, check coverage and lint
 
-check-uptodate:  ## Check that committed generated files are up-to-date
+check-uptodate: proto tidy  ## Check that committed generated files are up-to-date
+	test -z "$$(git status --porcelain -- $(REQUIRE_UPTODATE))" || { git diff -- $(REQUIRE_UPTODATE); git status $(REQUIRE_UPTODATE); false; }
 
 clean::  ## Remove generated files not to be committed
 
 .PHONY: all check-uptodate ci clean
+
+# --- Go -----------------------------------------------------------------------
+
+tidy:  ## Tidy go modules with "go mod tidy"
+	go mod tidy
+
+REQUIRE_UPTODATE += go.mod go.sum
+
+.PHONY: tidy
 
 # --- Protobuf -----------------------------------------------------------------
 
@@ -20,6 +32,8 @@ proto:  ## Generate Go pb and grpc bindings for .proto files
 	protoc -I proto proto/jobexec.proto \
 		--go_out=paths=source_relative:pb \
 		--go-grpc_out=paths=source_relative:pb
+
+REQUIRE_UPTODATE += pb
 
 .PHONY: proto
 
