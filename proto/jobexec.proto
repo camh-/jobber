@@ -112,6 +112,10 @@ message ListRequest {
   // all_job requests that a user with admin authorization list all users jobs
   // and not just their own.
   bool all_jobs = 1;
+
+  // terminated requests that terminated jobs be included in the response as
+  // well as running jobs
+  bool terminated = 2;
 }
 
 message ListResponse {
@@ -128,6 +132,7 @@ message StatusResponse {
 
 message LogsRequest {
   bytes job_id = 1;
+  bool follow = 2;
 }
 
 message LogsResponse {
