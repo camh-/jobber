@@ -1,6 +1,8 @@
 # Makefile for jobber. Run `make` or `make help` to display valid targets
 
 .DEFAULT_GOAL = help
+O = out
+VERSION ?= $(shell git describe --tags --dirty --always)
 
 # --- CI -----------------------------------------------------------------------
 
@@ -14,10 +16,20 @@ check-uptodate: proto tidy  ## Check that committed generated files are up-to-da
 	test -z "$$(git status --porcelain -- $(REQUIRE_UPTODATE))" || { git diff -- $(REQUIRE_UPTODATE); git status $(REQUIRE_UPTODATE); false; }
 
 clean::  ## Remove generated files not to be committed
+	-rm -rf $(O)
 
 .PHONY: all check-uptodate ci clean
 
 # --- Go -----------------------------------------------------------------------
+
+CMDS = .
+GO_LDFLAGS = -X main.version=$(VERSION)
+
+build: | $(O)
+	go build -o $(O) -ldflags='$(GO_LDFLAGS)' $(CMDS)
+
+test: | $(O)
+	go test -race ./...
 
 tidy:  ## Tidy go modules with "go mod tidy"
 	go mod tidy
@@ -44,6 +56,9 @@ COLOUR_WHITE  = $(shell tput setaf 7 2>/dev/null)
 help:  ## Display this help message
 	@echo 'Available targets:'
 	@awk -F ':.*## ' 'NF == 2 && $$1 ~ /^[A-Za-z0-9%_-]+$$/ { printf "$(COLOUR_WHITE)%-25s$(COLOUR_NORMAL)%s\n", $$1, $$2}' $(MAKEFILE_LIST) | sort
+
+$(O):
+	@mkdir -p $@
 
 .PHONY: help
 
