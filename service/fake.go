@@ -97,7 +97,7 @@ func (svc *FakeJobExecutor) List(ctx context.Context, req *pb.ListRequest) (*pb.
 		if j.status.GetUser() != user && !req.AllJobs {
 			continue
 		}
-		if j.status.GetState() == pb.JobStatus_JOBSTATE_COMPLETED && !req.Terminated {
+		if j.status.GetState() == pb.JobStatus_JOBSTATE_COMPLETED && !req.Completed {
 			continue
 		}
 		resp.Jobs = append(resp.Jobs, j.status)

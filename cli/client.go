@@ -52,8 +52,8 @@ type CmdStatus struct {
 // `jobber list` subcommand.
 type CmdList struct {
 	clientCmd
-	All        bool `short:"a" help:"List all user's jobs"`
-	Terminated bool `short:"t" help:"List terminated as well as running jobs"`
+	All       bool `short:"a" help:"List all user's jobs"`
+	Completed bool `short:"c" help:"List completed as well as running jobs"`
 }
 
 // CmdLogs is a kong struct describing the flags and arguments for the
@@ -179,7 +179,7 @@ func (cmd *CmdList) Run() error {
 	}
 	defer cmd.Close()
 
-	req := pb.ListRequest{AllJobs: cmd.All, Terminated: cmd.Terminated}
+	req := pb.ListRequest{AllJobs: cmd.All, Completed: cmd.Completed}
 	resp, err := cl.List(context.Background(), &req)
 	if err != nil {
 		return err

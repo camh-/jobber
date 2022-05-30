@@ -140,9 +140,9 @@ red-01234569       May 27 12:24:06  mallory  running
 	t.Run("list all", func(t *testing.T) {
 		w := &bytes.Buffer{}
 		cmd := CmdList{
-			clientCmd:  clientCmd{Address: address, output: w},
-			All:        true,
-			Terminated: true,
+			clientCmd: clientCmd{Address: address, output: w},
+			All:       true,
+			Completed: true,
 		}
 		err := cmd.Run()
 		require.NoError(t, err)
