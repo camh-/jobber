@@ -20,7 +20,7 @@ func TestClientAgainstFakeService(t *testing.T) {
 	require.NoError(t, err)
 
 	address := lis.Addr().String()
-	go grpcServer.Serve(lis)
+	go grpcServer.Serve(lis) //nolint:errcheck
 	defer grpcServer.Stop()
 
 	t.Run("run greeting", func(t *testing.T) {
