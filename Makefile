@@ -23,7 +23,7 @@ clean::  ## Remove generated files not to be committed
 # --- Running ------------------------------------------------------------------
 
 run-server: certs/server.crt build
-	sudo $(O)/jobber serve
+	sudo $(O)/jobber serve --admin $(USER)
 
 .PHONY: run-server
 
