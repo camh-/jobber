@@ -14,7 +14,8 @@ import (
 // CmdServe is a kong struct describing the flags and arguments for the
 // `jobber serve` subcommand.
 type CmdServe struct {
-	Listen string `short:"l" default:":8443" help:"TCP listen address"`
+	Listen string   `short:"l" default:":8443" help:"TCP listen address"`
+	Admin  []string `help:"admin users with full privileges"`
 
 	TLSCert string `name:"tls-cert" default:"certs/server.crt" help:"TLS server cert"`
 	TLSKey  string `name:"tls-key" default:"certs/server.key" help:"TLS server key"`
@@ -60,7 +61,7 @@ func (cmd *CmdServe) Run() error {
 		grpc.StreamInterceptor(grpc_auth.StreamServerInterceptor(CNToUser)),
 	)
 
-	jobberService := service.NewJobExecutor(ProcSelfArgMaker)
+	jobberService := service.NewJobExecutor(ProcSelfArgMaker, cmd.Admin)
 	jobberService.RegisterWith(grpcServer)
 
 	reflection.Register(grpcServer)

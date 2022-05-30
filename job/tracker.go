@@ -22,17 +22,23 @@ var (
 // Jobs can be added (started), stopped (including removed via cleanup if
 // desired), listed and attached to for log output.
 type Tracker struct {
-	jobs map[string]*Job
-	mu   sync.Mutex
+	jobs   map[string]*Job
+	mu     sync.Mutex
+	admins map[string]bool
 
 	argMaker ArgMaker
 }
 
-func NewTracker(argMaker ArgMaker) *Tracker {
-	return &Tracker{
+func NewTracker(argMaker ArgMaker, admins []string) *Tracker {
+	t := &Tracker{
 		jobs:     make(map[string]*Job),
+		admins:   make(map[string]bool),
 		argMaker: argMaker,
 	}
+	for _, admin := range admins {
+		t.admins[admin] = true
+	}
+	return t
 }
 
 type userContextKey struct{}
@@ -92,7 +98,7 @@ func (t *Tracker) Stop(ctx context.Context, id string, cleanup bool) error {
 
 	jd := j.Description()
 
-	if jd.Status.Owner != user {
+	if jd.Status.Owner != user && !t.admins[user] {
 		// XXX should probably be ErrUnknown to avoid enumeration attacks
 		return ErrUnauthorized
 	}
@@ -128,7 +134,7 @@ func (t *Tracker) Get(ctx context.Context, id string) (JobDescription, error) {
 
 	jd := j.Description()
 
-	if jd.Status.Owner != user {
+	if jd.Status.Owner != user && !t.admins[user] {
 		// XXX should probably be ErrUnknown to avoid enumeration attacks
 		return JobDescription{}, ErrUnauthorized
 	}
@@ -139,7 +145,7 @@ func (t *Tracker) Get(ctx context.Context, id string) (JobDescription, error) {
 
 // List returns a copy of all the jobs for a owner, or all jobs if the given
 // owner is empty. Only running jobs are returned, unless completed is true.
-func (t *Tracker) List(ctx context.Context, completed bool) []JobDescription {
+func (t *Tracker) List(ctx context.Context, completed, all bool) []JobDescription {
 	user, ok := GetUserFromContext(ctx)
 	if !ok {
 		return nil
@@ -152,7 +158,7 @@ func (t *Tracker) List(ctx context.Context, completed bool) []JobDescription {
 	for _, j := range t.jobs {
 		// XXX maybe clean up locking by using a function in the loop body
 		jd := j.Description()
-		if user != "" && user != jd.Status.Owner {
+		if user != jd.Status.Owner && !(all && t.admins[user]) {
 			continue
 		}
 		if !completed && jd.Status.State == JobStateCompleted {
@@ -184,7 +190,7 @@ func (t *Tracker) GetLogChannel(id string, follow bool, ctx context.Context) (<-
 
 	jd := j.Description()
 
-	if jd.Status.Owner != user {
+	if jd.Status.Owner != user && !t.admins[user] {
 		// XXX should probably be ErrUnknown to avoid enumeration attacks
 		return nil, ErrUnauthorized
 	}

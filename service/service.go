@@ -17,9 +17,9 @@ type JobExecutor struct {
 	tracker *job.Tracker
 }
 
-func NewJobExecutor(argMaker job.ArgMaker) *JobExecutor {
+func NewJobExecutor(argMaker job.ArgMaker, admins []string) *JobExecutor {
 	return &JobExecutor{
-		tracker: job.NewTracker(argMaker),
+		tracker: job.NewTracker(argMaker, admins),
 	}
 }
 
@@ -59,7 +59,7 @@ func (svc *JobExecutor) Status(ctx context.Context, req *pb.StatusRequest) (*pb.
 
 func (svc *JobExecutor) List(ctx context.Context, req *pb.ListRequest) (*pb.ListResponse, error) {
 	resp := &pb.ListResponse{}
-	for _, jd := range svc.tracker.List(ctx, req.GetCompleted()) {
+	for _, jd := range svc.tracker.List(ctx, req.GetCompleted(), req.GetAllJobs()) {
 		resp.Jobs = append(resp.Jobs, newJobStatusPB(jd))
 	}
 
