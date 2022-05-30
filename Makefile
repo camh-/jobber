@@ -20,6 +20,13 @@ clean::  ## Remove generated files not to be committed
 
 .PHONY: all check-uptodate ci clean
 
+# --- Running ------------------------------------------------------------------
+
+run-server: certs/server.crt build
+	sudo $(O)/jobber serve
+
+.PHONY: run-server
+
 # --- Go -----------------------------------------------------------------------
 
 CMDS = .

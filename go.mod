@@ -4,6 +4,7 @@ go 1.18
 
 require (
 	github.com/alecthomas/kong v0.5.0
+	github.com/grpc-ecosystem/go-grpc-middleware v1.3.0
 	github.com/stretchr/testify v1.7.1
 	golang.org/x/exp v0.0.0-20220518171630-0b5c67f07fdf
 	golang.org/x/sys v0.0.0-20211019181941-9d821ace8654

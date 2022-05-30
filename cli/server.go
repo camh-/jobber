@@ -6,6 +6,7 @@ import (
 
 	"github.com/camh-/jobber/job"
 	"github.com/camh-/jobber/service"
+	grpc_auth "github.com/grpc-ecosystem/go-grpc-middleware/auth"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 )
@@ -53,7 +54,11 @@ func (cmd *CmdServe) Run() error {
 	if err != nil {
 		return err
 	}
-	grpcServer := grpc.NewServer(grpc.Creds(creds))
+	grpcServer := grpc.NewServer(
+		grpc.Creds(creds),
+		grpc.UnaryInterceptor(grpc_auth.UnaryServerInterceptor(CNToUser)),
+		grpc.StreamInterceptor(grpc_auth.StreamServerInterceptor(CNToUser)),
+	)
 
 	jobberService := service.NewJobExecutor(ProcSelfArgMaker)
 	jobberService.RegisterWith(grpcServer)
