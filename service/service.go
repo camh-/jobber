@@ -11,9 +11,6 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// XXX Default user until authentication is added
-const authedUser = "eve"
-
 type JobExecutor struct {
 	pb.UnimplementedJobExecutorServer
 
@@ -35,7 +32,6 @@ func (svc *JobExecutor) Run(ctx context.Context, req *pb.RunRequest) (*pb.RunRes
 	if err != nil {
 		return nil, err
 	}
-	ctx = job.AddUserToContext(ctx, authedUser) // XXX temporary
 	id, err := svc.tracker.Start(ctx, spec)
 	if err != nil {
 		// XXX do gRPC status/errors properly
@@ -45,8 +41,6 @@ func (svc *JobExecutor) Run(ctx context.Context, req *pb.RunRequest) (*pb.RunRes
 }
 
 func (svc *JobExecutor) Stop(ctx context.Context, req *pb.StopRequest) (*pb.StopResponse, error) {
-	// XXX authorization check
-	ctx = job.AddUserToContext(ctx, authedUser) // XXX temporary
 	if err := svc.tracker.Stop(ctx, string(req.GetJobId()), req.GetCleanup()); err != nil {
 		// XXX do gRPC status/errors properly
 		return nil, err
@@ -55,8 +49,6 @@ func (svc *JobExecutor) Stop(ctx context.Context, req *pb.StopRequest) (*pb.Stop
 }
 
 func (svc *JobExecutor) Status(ctx context.Context, req *pb.StatusRequest) (*pb.StatusResponse, error) {
-	// XXX authorization check
-	ctx = job.AddUserToContext(ctx, authedUser) // XXX temporary
 	jd, err := svc.tracker.Get(ctx, string(req.GetJobId()))
 	if err != nil {
 		// XXX do gRPC status/errors properly
@@ -66,15 +58,6 @@ func (svc *JobExecutor) Status(ctx context.Context, req *pb.StatusRequest) (*pb.
 }
 
 func (svc *JobExecutor) List(ctx context.Context, req *pb.ListRequest) (*pb.ListResponse, error) {
-	// XXX authorization check
-	user := authedUser
-	if req.GetAllJobs() {
-		// XXX assumes admin for now. temporary hack until we have admin
-		// modelled in the tracker.
-		user = ""
-	}
-	ctx = job.AddUserToContext(ctx, user) // XXX temporary
-
 	resp := &pb.ListResponse{}
 	for _, jd := range svc.tracker.List(ctx, req.GetCompleted()) {
 		resp.Jobs = append(resp.Jobs, newJobStatusPB(jd))
@@ -92,10 +75,7 @@ func (svc *JobExecutor) List(ctx context.Context, req *pb.ListRequest) (*pb.List
 }
 
 func (svc *JobExecutor) Logs(req *pb.LogsRequest, stream pb.JobExecutor_LogsServer) error {
-	// XXX authorization check
-
 	id, follow, ctx := string(req.GetJobId()), req.GetFollow(), stream.Context()
-	ctx = job.AddUserToContext(ctx, authedUser) // XXX temporary
 	ch, err := svc.tracker.GetLogChannel(id, follow, ctx)
 	if err != nil {
 		return err
