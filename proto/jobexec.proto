@@ -2,6 +2,8 @@ syntax = "proto3";
 
 import "google/protobuf/timestamp.proto";
 
+option go_package = "github.com/camh-/jobber/pb";
+
 // JobExecutor is a service for running programs on the server hosting the
 // service. It supports running jobs with a simple level of resource control
 // and namespace limiting, and streams back the output of those jobs.
@@ -110,6 +112,10 @@ message ListRequest {
   // all_job requests that a user with admin authorization list all users jobs
   // and not just their own.
   bool all_jobs = 1;
+
+  // terminated requests that terminated jobs be included in the response as
+  // well as running jobs
+  bool terminated = 2;
 }
 
 message ListResponse {
@@ -126,6 +132,7 @@ message StatusResponse {
 
 message LogsRequest {
   bytes job_id = 1;
+  bool follow = 2;
 }
 
 message LogsResponse {

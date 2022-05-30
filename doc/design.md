@@ -233,9 +233,9 @@ Only running jobs are listed, unless `-t` is provided in which case all jobs
 is provided and the user is specified as an admin in the server config, then all
 users' jobs are listed
 
-To see the output of a job:
+To see the logs (output) of a job:
 
-    jobber output [-f] job-id
+    jobber logs [-f] job-id
 
 Output from the start of the job up to the current time is shown. If `-f` is
 specified, the output will continue to be streamed in real-time as it is
