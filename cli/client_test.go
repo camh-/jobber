@@ -12,8 +12,20 @@ import (
 	"google.golang.org/grpc"
 )
 
+func newClientCmd(address string, output io.Writer) clientCmd {
+	return clientCmd{
+		Address: address,
+		output:  output,
+		TLSCert: "testdata/user.crt",
+		TLSKey:  "testdata/user.key",
+		CACert:  "testdata/ca.crt",
+	}
+}
 func TestClientAgainstFakeService(t *testing.T) {
-	grpcServer := grpc.NewServer()
+	creds, err := mTLSCreds("testdata/server.crt", "testdata/server.key", "testdata/ca.crt")
+	require.NoError(t, err)
+
+	grpcServer := grpc.NewServer(grpc.Creds(creds))
 	jobberService := service.NewFake()
 	jobberService.RegisterWith(grpcServer)
 
@@ -27,7 +39,7 @@ func TestClientAgainstFakeService(t *testing.T) {
 	t.Run("run greeting", func(t *testing.T) {
 		w := &bytes.Buffer{}
 		cmd := CmdRun{
-			clientCmd:    clientCmd{Address: address, output: w},
+			clientCmd:    newClientCmd(address, w),
 			NoTimestamps: true,
 			JobSpec:      job.JobSpec{Command: "greeting"},
 		}
@@ -43,7 +55,7 @@ Goodbye world
 	t.Run("run jack beanstalk", func(t *testing.T) {
 		w := &bytes.Buffer{}
 		cmd := CmdRun{
-			clientCmd:    clientCmd{Address: address, output: w},
+			clientCmd:    newClientCmd(address, w),
 			NoTimestamps: true,
 			JobSpec: job.JobSpec{
 				Command: "jack",
@@ -63,7 +75,7 @@ fum
 
 	t.Run("run invalid-command", func(t *testing.T) {
 		cmd := CmdRun{
-			clientCmd:    clientCmd{Address: address, output: io.Discard},
+			clientCmd:    newClientCmd(address, io.Discard),
 			NoTimestamps: true,
 			JobSpec:      job.JobSpec{Command: "invalid-command"},
 		}
@@ -73,7 +85,7 @@ fum
 
 	t.Run("stop greeting-01234567", func(t *testing.T) {
 		cmd := CmdStop{
-			clientCmd: clientCmd{Address: address, output: io.Discard},
+			clientCmd: newClientCmd(address, io.Discard),
 			JobID:     "greeting-01234567",
 		}
 		err := cmd.Run()
@@ -82,7 +94,7 @@ fum
 
 	t.Run("stop invalid-job-id", func(t *testing.T) {
 		cmd := CmdStop{
-			clientCmd: clientCmd{Address: address, output: io.Discard},
+			clientCmd: newClientCmd(address, io.Discard),
 			JobID:     "invalid-job-id",
 		}
 		err := cmd.Run()
@@ -92,7 +104,7 @@ fum
 	t.Run("status greeting-01234567", func(t *testing.T) {
 		w := &bytes.Buffer{}
 		cmd := CmdStatus{
-			clientCmd: clientCmd{Address: address, output: w},
+			clientCmd: newClientCmd(address, w),
 			JobID:     "greeting-01234567",
 		}
 		err := cmd.Run()
@@ -105,7 +117,7 @@ greeting-01234567  May 27 12:24:04  eve   running
 
 	t.Run("status invalid-job-id", func(t *testing.T) {
 		cmd := CmdStatus{
-			clientCmd: clientCmd{Address: address, output: io.Discard},
+			clientCmd: newClientCmd(address, io.Discard),
 			JobID:     "invalid-job-id",
 		}
 		err := cmd.Run()
@@ -115,7 +127,7 @@ greeting-01234567  May 27 12:24:04  eve   running
 	t.Run("list", func(t *testing.T) {
 		w := &bytes.Buffer{}
 		cmd := CmdList{
-			clientCmd: clientCmd{Address: address, output: w},
+			clientCmd: newClientCmd(address, w),
 		}
 		err := cmd.Run()
 		require.NoError(t, err)
@@ -128,7 +140,7 @@ greeting-01234567  May 27 12:24:04  eve   running
 	t.Run("list all running", func(t *testing.T) {
 		w := &bytes.Buffer{}
 		cmd := CmdList{
-			clientCmd: clientCmd{Address: address, output: w},
+			clientCmd: newClientCmd(address, w),
 			All:       true,
 		}
 		err := cmd.Run()
@@ -143,7 +155,7 @@ red-01234569       May 27 12:24:06  mallory  running
 	t.Run("list all", func(t *testing.T) {
 		w := &bytes.Buffer{}
 		cmd := CmdList{
-			clientCmd: clientCmd{Address: address, output: w},
+			clientCmd: newClientCmd(address, w),
 			All:       true,
 			Completed: true,
 		}
@@ -160,7 +172,7 @@ red-01234569       May 27 12:24:06  mallory  running
 	t.Run("logs greeting-01234567", func(t *testing.T) {
 		w := &bytes.Buffer{}
 		cmd := CmdLogs{
-			clientCmd:    clientCmd{Address: address, output: w},
+			clientCmd:    newClientCmd(address, w),
 			JobID:        "greeting-01234567",
 			NoTimestamps: true,
 		}
@@ -179,5 +191,48 @@ Goodbye world
 		}
 		err := cmd.Run()
 		require.Error(t, err)
+	})
+
+	t.Run("invalid client cert CA", func(t *testing.T) {
+		w := &bytes.Buffer{}
+		cmd := CmdRun{
+			clientCmd: newClientCmd(address, w),
+			Detach:    true,
+			JobSpec:   job.JobSpec{Command: "greeting"},
+		}
+		cmd.TLSCert = "testdata/baduser.crt"
+		cmd.TLSKey = "testdata/baduser.key"
+		err := cmd.Run()
+		// We don't get a good error message from the client connection,
+		// just "broken pipe". Shame. XXX Look deeper.
+		require.Error(t, err)
+	})
+
+}
+
+func TestBadServerCerts(t *testing.T) {
+	creds, err := mTLSCreds("testdata/badserver.crt", "testdata/badserver.key", "testdata/ca.crt")
+	require.NoError(t, err)
+
+	grpcServer := grpc.NewServer(grpc.Creds(creds))
+	jobberService := service.NewFake()
+	jobberService.RegisterWith(grpcServer)
+
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+
+	address := lis.Addr().String()
+	go grpcServer.Serve(lis) //nolint:errcheck
+	defer grpcServer.Stop()
+
+	t.Run("invalid server cert CA", func(t *testing.T) {
+		w := &bytes.Buffer{}
+		cmd := CmdRun{
+			clientCmd: newClientCmd(address, w),
+			Detach:    true,
+			JobSpec:   job.JobSpec{Command: "greeting"},
+		}
+		err := cmd.Run()
+		require.ErrorContains(t, err, "x509: certificate signed by unknown authority")
 	})
 }
