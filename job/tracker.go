@@ -11,12 +11,11 @@ import (
 )
 
 var (
-	ErrAlreadyTracked = errors.New("job already tracked (has ID)")
-	ErrUnauthorized   = errors.New("unauthorized")
-	ErrMissingID      = errors.New("missing job ID")
-	ErrNoCommand      = errors.New("missing job command")
-	ErrNotStarted     = errors.New("could not start job")
-	ErrUnknown        = errors.New("unknown job")
+	ErrUnauthorized = errors.New("unauthorized")
+	ErrMissingID    = errors.New("missing job ID")
+	ErrNoCommand    = errors.New("missing job command")
+	ErrNotStarted   = errors.New("could not start job")
+	ErrUnknown      = errors.New("unknown job")
 )
 
 // Tracker maintains a set of Jobs that are either running or have completed.
@@ -25,11 +24,14 @@ var (
 type Tracker struct {
 	jobs map[string]*Job
 	mu   sync.Mutex
+
+	argMaker ArgMaker
 }
 
-func NewTracker() *Tracker {
+func NewTracker(argMaker ArgMaker) *Tracker {
 	return &Tracker{
-		jobs: make(map[string]*Job),
+		jobs:     make(map[string]*Job),
+		argMaker: argMaker,
 	}
 }
 
@@ -47,34 +49,29 @@ func GetUserFromContext(ctx context.Context) (string, bool) {
 // Start runs the given job. If it starts, the job will be tracked and can be
 // operated upon. If it does not start, an error is returned and the job is
 // not tracked.
-func (t *Tracker) Start(ctx context.Context, j *Job) error {
+func (t *Tracker) Start(ctx context.Context, spec JobSpec) (string, error) {
 	user, ok := GetUserFromContext(ctx)
 	if !ok {
-		return ErrUnauthorized
+		return "", ErrUnauthorized
 	}
 
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	j.mu.Lock()
-	defer j.mu.Unlock()
-
-	if j.ID != "" {
-		return ErrAlreadyTracked
+	if spec.Command == "" {
+		return "", ErrNoCommand
 	}
 
-	if j.Spec.Command == "" {
-		return ErrNoCommand
-	}
+	id := t.allocateID(spec)
+	j := NewJob(id, spec, t.argMaker)
 
-	j.ID = t.allocateID(j)
 	if err := j.Start(user); err != nil {
 		// don't track a job we can't start
-		return fmt.Errorf("%w: %v", ErrNotStarted, err) // would be nice to wrap both
+		return "", fmt.Errorf("%w: %v", ErrNotStarted, err) // would be nice to wrap both
 	}
-	t.jobs[j.ID] = j
+	t.jobs[id] = j
 
-	return nil
+	return id, nil
 }
 
 // Stop kills the job identified by id. It waits until the job exits before
@@ -93,15 +90,14 @@ func (t *Tracker) Stop(ctx context.Context, id string, cleanup bool) error {
 		return fmt.Errorf("%s: %w", id, ErrUnknown)
 	}
 
-	j.mu.Lock()
-	defer j.mu.Unlock()
+	jd := j.Description()
 
-	if j.Status.Owner != user {
+	if jd.Status.Owner != user {
 		// XXX should probably be ErrUnknown to avoid enumeration attacks
 		return ErrUnauthorized
 	}
 
-	if j.Status.State == JobStateRunning {
+	if jd.Status.State == JobStateRunning {
 		j.Stop(ctx)
 	}
 
@@ -116,10 +112,10 @@ func (t *Tracker) Stop(ctx context.Context, id string, cleanup bool) error {
 // Get returns a copy of the job identified by id if it exists in the tracker,
 // otherwise an error. The copy returned is not an active job that can be
 // manipulated - it is just for the data.
-func (t *Tracker) Get(ctx context.Context, id string) (*Job, error) {
+func (t *Tracker) Get(ctx context.Context, id string) (JobDescription, error) {
 	user, ok := GetUserFromContext(ctx)
 	if !ok {
-		return nil, ErrUnauthorized
+		return JobDescription{}, ErrUnauthorized
 	}
 
 	t.mu.Lock()
@@ -127,24 +123,23 @@ func (t *Tracker) Get(ctx context.Context, id string) (*Job, error) {
 
 	j, ok := t.jobs[id]
 	if !ok {
-		return nil, fmt.Errorf("%s: %w", id, ErrUnknown)
+		return JobDescription{}, fmt.Errorf("%s: %w", id, ErrUnknown)
 	}
 
-	j.mu.Lock()
-	defer j.mu.Unlock()
+	jd := j.Description()
 
-	if j.Status.Owner != user {
+	if jd.Status.Owner != user {
 		// XXX should probably be ErrUnknown to avoid enumeration attacks
-		return nil, ErrUnauthorized
+		return JobDescription{}, ErrUnauthorized
 	}
 
-	return &Job{ID: id, Spec: j.Spec, Status: j.Status}, nil
+	return jd, nil
 
 }
 
 // List returns a copy of all the jobs for a owner, or all jobs if the given
 // owner is empty. Only running jobs are returned, unless completed is true.
-func (t *Tracker) List(ctx context.Context, completed bool) []*Job {
+func (t *Tracker) List(ctx context.Context, completed bool) []JobDescription {
 	user, ok := GetUserFromContext(ctx)
 	if !ok {
 		return nil
@@ -153,21 +148,17 @@ func (t *Tracker) List(ctx context.Context, completed bool) []*Job {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	var jobs []*Job
+	var jobs []JobDescription
 	for _, j := range t.jobs {
 		// XXX maybe clean up locking by using a function in the loop body
-		j.mu.Lock()
-		if user != "" && user != j.Status.Owner {
-			j.mu.Unlock()
+		jd := j.Description()
+		if user != "" && user != jd.Status.Owner {
 			continue
 		}
-		if !completed && j.Status.State == JobStateCompleted {
-			j.mu.Unlock()
+		if !completed && jd.Status.State == JobStateCompleted {
 			continue
 		}
-		jcopy := Job{ID: j.ID, Spec: j.Spec, Status: j.Status}
-		j.mu.Unlock()
-		jobs = append(jobs, &jcopy)
+		jobs = append(jobs, jd)
 	}
 
 	return jobs
@@ -191,7 +182,9 @@ func (t *Tracker) GetLogChannel(id string, follow bool, ctx context.Context) (<-
 		return nil, fmt.Errorf("%s: %w", id, ErrUnknown)
 	}
 
-	if j.Status.Owner != user {
+	jd := j.Description()
+
+	if jd.Status.Owner != user {
 		// XXX should probably be ErrUnknown to avoid enumeration attacks
 		return nil, ErrUnauthorized
 	}
@@ -199,12 +192,12 @@ func (t *Tracker) GetLogChannel(id string, follow bool, ctx context.Context) (<-
 	return j.AttachOutfeed(follow, ctx.Done()), nil
 }
 
-func (t *Tracker) allocateID(j *Job) string {
+func (t *Tracker) allocateID(spec JobSpec) string {
 	// XXX If we have 4 billion jobs with the same command, this could loop
 	// infinitely. A good program would check that :(
 	for {
 		// pseudo-randomness is good enough for this.
-		base := filepath.Base(j.Spec.Command) + "-"
+		base := filepath.Base(spec.Command) + "-"
 		id := base + strconv.FormatUint(uint64(rand.Uint32()), 16)
 		if _, ok := t.jobs[id]; !ok {
 			return id

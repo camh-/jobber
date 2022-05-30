@@ -8,16 +8,15 @@ import (
 
 // ProcSelfArgMaker returns a command line to run the job in a container.
 // This runs ourself as "/proc/self/exe rc ..."
-func ProcSelfArgMaker(j *job.Job) (cmd string, args []string) {
-	argv := []string{"--id", j.ID}
+func ProcSelfArgMaker(jd job.JobDescription) (cmd string, args []string) {
+	argv := []string{"--id", jd.ID}
 
-	spec := j.Spec
-	r := spec.Resources
+	r := jd.Spec.Resources
 
-	if spec.Root != "" {
-		argv = append(argv, "--root", spec.Root)
+	if jd.Spec.Root != "" {
+		argv = append(argv, "--root", jd.Spec.Root)
 	}
-	if spec.IsolateNetwork {
+	if jd.Spec.IsolateNetwork {
 		argv = append(argv, "--isolate-network")
 	}
 	if r.MaxProcesses != 0 {
@@ -33,8 +32,8 @@ func ProcSelfArgMaker(j *job.Job) (cmd string, args []string) {
 		argv = append(argv, "--io", iolim.String())
 	}
 
-	argv = append(argv, "--", spec.Command)
-	argv = append(argv, spec.Args...)
+	argv = append(argv, "--", jd.Spec.Command)
+	argv = append(argv, jd.Spec.Args...)
 
 	return "/proc/self/exe", append([]string{"jobber", "rc"}, argv...)
 }

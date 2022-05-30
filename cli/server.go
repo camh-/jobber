@@ -62,11 +62,7 @@ func (cmd *CmdRunJob) Run() error {
 		return err
 	}
 
-	j := job.Job{
-		ID:       cmd.ID,
-		Spec:     cmd.JobSpec,
-		ArgMaker: ProcSelfArgMaker,
-	}
+	j := job.NewJob(cmd.ID, cmd.JobSpec, ProcSelfArgMaker)
 	if err := j.Start("owner"); err != nil {
 		return err
 	}
@@ -80,10 +76,7 @@ func (cmd *CmdRunJob) Run() error {
 // container running process - setting up the cgroup(s) and namespace(s)
 // and execing the job's command.
 func (cmd *CmdRunContainer) Run() error {
-	j := job.Job{
-		ID:   cmd.ID,
-		Spec: cmd.JobSpec,
-	}
+	j := job.NewJob(cmd.ID, cmd.JobSpec, nil)
 	j.ExecPart2()
 	return nil
 }

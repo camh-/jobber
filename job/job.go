@@ -16,13 +16,14 @@ import (
 
 const JobberCG = "/sys/fs/cgroup/jobber"
 
-type ArgMaker func(*Job) (string, []string)
+type ArgMaker func(JobDescription) (string, []string)
 
 type Job struct {
-	ID       string
-	Spec     JobSpec
-	Status   JobStatus
-	ArgMaker ArgMaker
+	ID     string
+	Spec   JobSpec
+	Status JobStatus
+
+	argMaker ArgMaker
 
 	mu  sync.Mutex
 	cmd *exec.Cmd
@@ -66,12 +67,25 @@ type JobStatus struct {
 	ExitError error
 }
 
+type JobDescription struct {
+	ID     string
+	Spec   JobSpec
+	Status JobStatus
+}
+
 var (
 	ErrAlreadyStarted = errors.New("job already started")
 )
 
+func NewJob(id string, spec JobSpec, argMaker ArgMaker) *Job {
+	return &Job{ID: id, Spec: spec, argMaker: argMaker}
+}
+
 // Start runs the job.
 func (j *Job) Start(owner string) error {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+
 	if j.Status.State != JobStatePreStart {
 		return fmt.Errorf("%s: %w", j.ID, ErrAlreadyStarted)
 	}
@@ -95,7 +109,13 @@ func (j *Job) Start(owner string) error {
 	logchan := make(chan Log)
 	go func() {
 		infeed(output, logchan)
-		err := j.cmd.Wait()
+
+		j.mu.Lock()
+		cmd := j.cmd
+		j.mu.Unlock()
+
+		err := cmd.Wait()
+
 		j.mu.Lock()
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			// XXX ExitCode() can return -1 if exited via a signal, which
@@ -117,18 +137,28 @@ func (j *Job) Start(owner string) error {
 // Stop terminates the job (with extreme prejudice - SIGKILL). The job
 // lock must be held.
 func (j *Job) Stop(ctx context.Context) {
+	j.mu.Lock()
+
+	// XXX No SIGTERM, No grace period
 	_ = j.cmd.Process.Kill() // SIGKILL
 
+	reaped := j.reaped
 	// We need to release the job lock while we wait for it to be
 	// reaped, as the reaper needs the lock to update the job's
 	// status and exit code.
 	j.mu.Unlock()
+
 	// Wait for the job to be reaped or for the context to be cancelled.
 	select {
-	case <-j.reaped:
+	case <-reaped:
 	case <-ctx.Done():
 	}
+}
+
+func (j *Job) Description() JobDescription {
 	j.mu.Lock()
+	defer j.mu.Unlock()
+	return JobDescription{ID: j.ID, Spec: j.Spec, Status: j.Status}
 }
 
 func (j *Job) AttachOutfeed(follow bool, done <-chan struct{}) <-chan Log {
@@ -138,6 +168,7 @@ func (j *Job) AttachOutfeed(follow bool, done <-chan struct{}) <-chan Log {
 }
 
 func (j *Job) Cleanup() {
+	// lock not needed
 	close(j.done)
 }
 
@@ -151,7 +182,7 @@ func (j *Job) Cleanup() {
 // process.
 //
 // If successful, it returns an io.ReadCloser that can be read for the command's
-// combined stdout/stderr stream. Once that has closed, Job.Wait() should be
+// combined stdout/stderr stream. Once that has closed, Job.cmd.Wait() should be
 // called on the job to capture the exit code of the process and reap it.
 func (j *Job) ExecPart1() (io.ReadCloser, error) {
 	cmd := &exec.Cmd{
@@ -175,8 +206,8 @@ func (j *Job) ExecPart1() (io.ReadCloser, error) {
 		cmd.SysProcAttr.Cloneflags |= syscall.CLONE_NEWNET
 	}
 
-	cmd.Path, cmd.Args = j.ArgMaker(j)
-
+	jd := JobDescription{ID: j.ID, Spec: j.Spec, Status: j.Status}
+	cmd.Path, cmd.Args = j.argMaker(jd)
 	if err := cmd.Start(); err != nil {
 		return nil, err
 	}

@@ -17,14 +17,12 @@ const authedUser = "eve"
 type JobExecutor struct {
 	pb.UnimplementedJobExecutorServer
 
-	tracker  *job.Tracker
-	argMaker job.ArgMaker
+	tracker *job.Tracker
 }
 
 func NewJobExecutor(argMaker job.ArgMaker) *JobExecutor {
 	return &JobExecutor{
-		tracker:  job.NewTracker(),
-		argMaker: argMaker,
+		tracker: job.NewTracker(argMaker),
 	}
 }
 
@@ -38,12 +36,12 @@ func (svc *JobExecutor) Run(ctx context.Context, req *pb.RunRequest) (*pb.RunRes
 		return nil, err
 	}
 	ctx = job.AddUserToContext(ctx, authedUser) // XXX temporary
-	j := &job.Job{Spec: spec, ArgMaker: svc.argMaker}
-	if err := svc.tracker.Start(ctx, j); err != nil {
+	id, err := svc.tracker.Start(ctx, spec)
+	if err != nil {
 		// XXX do gRPC status/errors properly
 		return nil, err
 	}
-	return &pb.RunResponse{JobId: []byte(j.ID)}, nil
+	return &pb.RunResponse{JobId: []byte(id)}, nil
 }
 
 func (svc *JobExecutor) Stop(ctx context.Context, req *pb.StopRequest) (*pb.StopResponse, error) {
@@ -59,12 +57,12 @@ func (svc *JobExecutor) Stop(ctx context.Context, req *pb.StopRequest) (*pb.Stop
 func (svc *JobExecutor) Status(ctx context.Context, req *pb.StatusRequest) (*pb.StatusResponse, error) {
 	// XXX authorization check
 	ctx = job.AddUserToContext(ctx, authedUser) // XXX temporary
-	j, err := svc.tracker.Get(ctx, string(req.GetJobId()))
+	jd, err := svc.tracker.Get(ctx, string(req.GetJobId()))
 	if err != nil {
 		// XXX do gRPC status/errors properly
 		return nil, err
 	}
-	return &pb.StatusResponse{Status: newJobStatusPB(j)}, nil
+	return &pb.StatusResponse{Status: newJobStatusPB(jd)}, nil
 }
 
 func (svc *JobExecutor) List(ctx context.Context, req *pb.ListRequest) (*pb.ListResponse, error) {
@@ -78,8 +76,8 @@ func (svc *JobExecutor) List(ctx context.Context, req *pb.ListRequest) (*pb.List
 	ctx = job.AddUserToContext(ctx, user) // XXX temporary
 
 	resp := &pb.ListResponse{}
-	for _, j := range svc.tracker.List(ctx, req.GetCompleted()) {
-		resp.Jobs = append(resp.Jobs, newJobStatusPB(j))
+	for _, jd := range svc.tracker.List(ctx, req.GetCompleted()) {
+		resp.Jobs = append(resp.Jobs, newJobStatusPB(jd))
 	}
 
 	// Sort jobs by start time, then job ID for a determinstic ordering
@@ -148,9 +146,9 @@ func newJobSpec(pbspec *pb.JobSpec) (job.JobSpec, error) {
 }
 
 // Create a protobuf JobStatus from a job.Job
-func newJobStatusPB(j *job.Job) *pb.JobStatus {
+func newJobStatusPB(jd job.JobDescription) *pb.JobStatus {
 	var state pb.JobStatus_JobState
-	switch j.Status.State {
+	switch jd.Status.State {
 	case job.JobStatePreStart:
 		// nothing. leave as invalid. this should never appear in a tracker
 		// XXX maybe panic?
@@ -163,11 +161,11 @@ func newJobStatusPB(j *job.Job) *pb.JobStatus {
 	}
 
 	return &pb.JobStatus{
-		JobId:     []byte(j.ID),
-		StartTime: timestamppb.New(j.Status.StartTime),
-		User:      j.Status.Owner,
+		JobId:     []byte(jd.ID),
+		StartTime: timestamppb.New(jd.Status.StartTime),
+		User:      jd.Status.Owner,
 		State:     state,
-		ExitCode:  j.Status.ExitCode,
+		ExitCode:  jd.Status.ExitCode,
 		Spec:      nil, // XXX todo. nothing uses it yet
 	}
 }
