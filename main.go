@@ -13,7 +13,12 @@ var version = "v0.0.0"
 type config struct {
 	Version kong.VersionFlag `short:"V" help:"Print version information"`
 
-	Serve  cli.CmdServe  `cmd:"" help:"Serve the JobExecutor gRPC service"`
+	// Server commands
+	Serve cli.CmdServe        `cmd:"" help:"Serve the JobExecutor gRPC service"`
+	Rc    cli.CmdRunContainer `cmd:"" hidden:""`
+	Rj    cli.CmdRunJob       `cmd:"" hidden:""`
+
+	// Client commands
 	Run    cli.CmdRun    `cmd:"" help:"Run a job on a remote jobber server"`
 	Stop   cli.CmdStop   `cmd:"" help:"Stop a job on a remote jobber server"`
 	Status cli.CmdStatus `cmd:"" help:"Get status of a job on a remote jobber server"`
