@@ -52,9 +52,42 @@ REQUIRE_UPTODATE += pb
 
 .PHONY: proto
 
+# --- Certificates -------------------------------------------------------------
+
+CERTDIR = certs
+CERTSTRAP = certstrap --depot-path $(CERTDIR)
+
+$(CERTDIR)/ca.key $(CERTDIR)/ca.crt: | $(CERTDIR) install-certstrap
+	$(CERTSTRAP) init --common-name ca --expires "10 years" --curve P-256 --passphrase ""
+
+$(CERTDIR)/server.key $(CERTDIR)/server.crt: | $(CERTDIR)/ca.key $(CERTDIR) install-certstrap
+	$(CERTSTRAP) request-cert --common-name server --ip 0.0.0.0 --domain localhost --passphrase ""
+	$(CERTSTRAP) sign server --expires "3 months" --CA ca
+
+$(CERTDIR)/%.key $(CERTDIR)/%.crt: | $(CERTDIR)/ca.key $(CERTDIR) install-certstrap
+	$(CERTSTRAP) request-cert --common-name $* --passphrase ""
+	$(CERTSTRAP) sign $(USER) --expires "7 days" --CA ca
+
+default-user-cert: | $(CERTDIR)/$(USER).key  ## Set user "$(USER)" as default user cert
+	ln -nsf $(USER).key $(CERTDIR)/user.key
+	ln -nsf $(USER).crt $(CERTDIR)/user.crt
+
+$(CERTDIR):
+	@mkdir -p $@
+
+clean-certs::  ## Remove generated certificates
+	rm -rf $(CERTDIR)
+
+.PHONY: clean-certs default-user-cert
+
+
 # --- Utilities ----------------------------------------------------------------
 COLOUR_NORMAL = $(shell tput sgr0 2>/dev/null)
 COLOUR_WHITE  = $(shell tput setaf 7 2>/dev/null)
+
+install-certstrap: $(O)/bin/certstrap  ## install certstrap utility for generating certs
+$(O)/bin/certstrap:
+	go install github.com/square/certstrap@master
 
 help:  ## Display this help message
 	@echo 'Available targets:'
@@ -63,7 +96,7 @@ help:  ## Display this help message
 $(O):
 	@mkdir -p $@
 
-.PHONY: help
+.PHONY: help install-certstrap
 
 define nl
 
