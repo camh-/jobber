@@ -6,6 +6,7 @@ import (
 	"net"
 	"testing"
 
+	"github.com/camh-/jobber/job"
 	"github.com/camh-/jobber/service"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
@@ -28,7 +29,7 @@ func TestClientAgainstFakeService(t *testing.T) {
 		cmd := CmdRun{
 			clientCmd:    clientCmd{Address: address, output: w},
 			NoTimestamps: true,
-			Command:      "greeting",
+			JobSpec:      job.JobSpec{Command: "greeting"},
 		}
 		err := cmd.Run()
 		require.NoError(t, err)
@@ -44,8 +45,10 @@ Goodbye world
 		cmd := CmdRun{
 			clientCmd:    clientCmd{Address: address, output: w},
 			NoTimestamps: true,
-			Command:      "jack",
-			Args:         []string{"beanstalk"},
+			JobSpec: job.JobSpec{
+				Command: "jack",
+				Args:    []string{"beanstalk"},
+			},
 		}
 		err := cmd.Run()
 		require.NoError(t, err)
@@ -62,7 +65,7 @@ fum
 		cmd := CmdRun{
 			clientCmd:    clientCmd{Address: address, output: io.Discard},
 			NoTimestamps: true,
-			Command:      "invalid-command",
+			JobSpec:      job.JobSpec{Command: "invalid-command"},
 		}
 		err := cmd.Run()
 		require.Error(t, err)
