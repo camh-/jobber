@@ -13,7 +13,11 @@ import (
 // CmdServe is a kong struct describing the flags and arguments for the
 // `jobber serve` subcommand.
 type CmdServe struct {
-	Listen string `short:"l" default:":8080" help:"TCP listen address"`
+	Listen string `short:"l" default:":8443" help:"TCP listen address"`
+
+	TLSCert string `name:"tls-cert" default:"certs/server.crt" help:"TLS server cert"`
+	TLSKey  string `name:"tls-key" default:"certs/server.key" help:"TLS server key"`
+	CACert  string `name:"ca-cert" default:"certs/ca.crt" help:"CA for authenticating users"`
 }
 
 // CmdRunJob is a hidden entrypoint just for testing the container runner
@@ -44,7 +48,12 @@ func (cmd *CmdServe) Run() error {
 	if err != nil {
 		return err
 	}
-	grpcServer := grpc.NewServer()
+
+	creds, err := mTLSCreds(cmd.TLSCert, cmd.TLSKey, cmd.CACert)
+	if err != nil {
+		return err
+	}
+	grpcServer := grpc.NewServer(grpc.Creds(creds))
 
 	jobberService := service.NewJobExecutor(ProcSelfArgMaker)
 	jobberService.RegisterWith(grpcServer)
