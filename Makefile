@@ -10,7 +10,7 @@ REQUIRE_UPTODATE =
 
 ci: clean check-uptodate all  ## Full clean, build and up-to-date checks for CI
 
-all: build test lint  ## build, test and lint
+all: build test lint integration-test  ## build, test, lint and integration-test
 
 check-uptodate: proto tidy  ## Check that committed generated files are up-to-date
 	test -z "$$(git status --porcelain -- $(REQUIRE_UPTODATE))" || { git diff -- $(REQUIRE_UPTODATE); git status $(REQUIRE_UPTODATE); false; }
@@ -25,7 +25,10 @@ clean::  ## Remove generated files not to be committed
 run-server: certs/server.crt build  ## Run the server as root with current user as admin
 	sudo $(O)/jobber serve --admin $(USER)
 
-.PHONY: run-server
+integration-test: testcerts  ## Run an integration test
+	./testscripts/integration.sh
+
+.PHONY: integration-test run-server
 
 # --- Go -----------------------------------------------------------------------
 
