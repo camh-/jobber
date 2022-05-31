@@ -61,7 +61,13 @@ func (cmd *CmdServe) Run() error {
 		grpc.StreamInterceptor(grpc_auth.StreamServerInterceptor(CNToUser)),
 	)
 
-	jobberService := service.NewJobExecutor(ProcSelfArgMaker, cmd.Admin)
+	done := make(chan struct{})
+	go func() {
+		<-done
+		grpcServer.GracefulStop()
+	}()
+
+	jobberService := service.NewJobExecutor(done, ProcSelfArgMaker, cmd.Admin)
 	jobberService.RegisterWith(grpcServer)
 
 	reflection.Register(grpcServer)

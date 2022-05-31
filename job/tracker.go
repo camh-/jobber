@@ -15,6 +15,7 @@ var (
 	ErrMissingID    = errors.New("missing job ID")
 	ErrNoCommand    = errors.New("missing job command")
 	ErrNotStarted   = errors.New("could not start job")
+	ErrShutdown     = errors.New("service is shut down")
 	ErrUnknown      = errors.New("unknown job")
 )
 
@@ -27,6 +28,8 @@ type Tracker struct {
 	admins map[string]bool
 
 	argMaker ArgMaker
+
+	shutdown bool
 }
 
 func NewTracker(argMaker ArgMaker, admins []string) *Tracker {
@@ -63,6 +66,10 @@ func (t *Tracker) Start(ctx context.Context, spec JobSpec) (string, error) {
 
 	t.mu.Lock()
 	defer t.mu.Unlock()
+
+	if t.shutdown {
+		return "", ErrShutdown
+	}
 
 	if spec.Command == "" {
 		return "", ErrNoCommand
@@ -196,6 +203,29 @@ func (t *Tracker) GetLogChannel(id string, follow bool, ctx context.Context) (<-
 	}
 
 	return j.AttachOutfeed(follow, ctx.Done()), nil
+}
+
+func (t *Tracker) Shutdown(ctx context.Context) (int, error) {
+	user, ok := GetUserFromContext(ctx)
+	if !ok || !t.admins[user] {
+		return 0, ErrUnauthorized
+	}
+
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	count := 0
+	for _, j := range t.jobs {
+		if j.Status.State != JobStateRunning {
+			continue
+		}
+		count++
+		j.Stop(context.Background()) // don't let a canceled client context stop us
+		j.Cleanup()
+		delete(t.jobs, j.ID)
+	}
+
+	return count, nil
 }
 
 func (t *Tracker) allocateID(spec JobSpec) string {

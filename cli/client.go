@@ -69,6 +69,10 @@ type CmdLogs struct {
 	JobID        string `arg:"" help:"ID of job to fetch logs from"`
 }
 
+type CmdShutdown struct {
+	clientCmd
+}
+
 func (c *clientCmd) connect() (pb.JobExecutorClient, error) {
 	creds, err := mTLSCreds(c.TLSCert, c.TLSKey, c.CACert)
 	if err != nil {
@@ -229,6 +233,21 @@ func (cmd *CmdLogs) Run() error {
 	defer cmd.Close()
 
 	return getLogs(cmd.writer(), cl, []byte(cmd.JobID), cmd.Follow, !cmd.NoTimestamps)
+}
+
+func (cmd *CmdShutdown) Run() error {
+	cl, err := cmd.connect()
+	if err != nil {
+		return err
+	}
+	defer cmd.Close()
+
+	resp, err := cl.Shutdown(context.Background(), &pb.ShutdownRequest{})
+	if err != nil {
+		return err
+	}
+	fmt.Println(resp.NumJobsStopped, "jobs stopped")
+	return nil
 }
 
 // printStatus formats the JobStatuses passed to it and writes them to the
