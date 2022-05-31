@@ -351,13 +351,18 @@ func (j *Job) execPart2() error {
 }
 
 func InitCgroups() error {
+	const controllers = "+cpu +cpuset +io +memory +pids"
+	if err := os.WriteFile("/sys/fs/cgroup/cgroup.subtree_control", []byte(controllers), 0700); err != nil {
+		return fmt.Errorf("could not configure root cgroup controllers: %w", err)
+	}
+
 	err := os.Mkdir(JobberCG, 0755)
 	if err != nil && !os.IsExist(err) {
 		return fmt.Errorf("could not create jobber cgroup: %w", err)
 	}
 
 	// XXX Not sure if cpuset is required.
-	if err := cgWrite("cgroup.subtree_control", "", "+cpu +cpuset +io +memory +pids"); err != nil {
+	if err := cgWrite("cgroup.subtree_control", "", controllers); err != nil {
 		return fmt.Errorf("could not configure cgroup controllers: %w", err)
 	}
 	return nil
