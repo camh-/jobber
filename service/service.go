@@ -15,11 +15,13 @@ type JobExecutor struct {
 	pb.UnimplementedJobExecutorServer
 
 	tracker *job.Tracker
+	done    chan<- struct{}
 }
 
-func NewJobExecutor(argMaker job.ArgMaker, admins []string) *JobExecutor {
+func NewJobExecutor(done chan<- struct{}, argMaker job.ArgMaker, admins []string) *JobExecutor {
 	return &JobExecutor{
 		tracker: job.NewTracker(argMaker, admins),
+		done:    done,
 	}
 }
 
@@ -91,6 +93,17 @@ func (svc *JobExecutor) Logs(req *pb.LogsRequest, stream pb.JobExecutor_LogsServ
 		}
 	}
 	return nil
+}
+
+func (svc *JobExecutor) Shutdown(ctx context.Context, req *pb.ShutdownRequest) (*pb.ShutdownResponse, error) {
+	count, err := svc.tracker.Shutdown(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	close(svc.done)
+
+	return &pb.ShutdownResponse{NumJobsStopped: int32(count)}, nil
 }
 
 // Convert a protobuf JobSpec to a job.JobSpec

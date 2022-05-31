@@ -13,6 +13,8 @@ service JobExecutor {
   rpc List(ListRequest) returns (ListResponse);
   rpc Status(StatusRequest) returns (StatusResponse);
   rpc Logs(LogsRequest) returns (stream LogsResponse);
+
+  rpc Shutdown(ShutdownRequest) returns (ShutdownResponse);
 }
 
 message JobSpec {
@@ -146,4 +148,10 @@ message LogsResponse {
   // 512-byte chunks, although a newline character in the binary stream may
   // cause a short block.
   bytes line = 2;
+}
+
+message ShutdownRequest {}
+
+message ShutdownResponse {
+  int32 num_jobs_stopped = 1;
 }
