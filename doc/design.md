@@ -217,7 +217,7 @@ To stop a running job:
     jobber stop [-c] job-id
 
 The job specified by `job-id` is stopped if it is running, and if `-c` is
-provided, it is removed from the list of terminated jobs. Otherwise the job will
+provided, it is removed from the list of completed jobs. Otherwise the job will
 remain in the list of terminate processes until cleaned-up with `-c`.
 
 To check the status of a running or completed job:
@@ -226,10 +226,10 @@ To check the status of a running or completed job:
 
 To list jobs:
 
-    jobber list [-t] [-a]
+    jobber list [-c] [-a]
 
-Only running jobs are listed, unless `-t` is provided in which case all jobs
-(running and terminated) are listed. Only jobs for the user are listed. If `-a`
+Only running jobs are listed, unless `-c` is provided in which case all jobs
+(running and completed) are listed. Only jobs for the user are listed. If `-a`
 is provided and the user is specified as an admin in the server config, then all
 users' jobs are listed
 

@@ -8,6 +8,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/camh-/jobber/job"
 	pb "github.com/camh-/jobber/pb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -27,10 +28,10 @@ type clientCmd struct {
 // `jobber run` subcommand.
 type CmdRun struct {
 	clientCmd
-	Detach       bool     `short:"d" help:"Detach from output when running" xor:"ts"`
-	NoTimestamps bool     `short:"T" help:"Do not output timestamps on lines" xor:"ts"`
-	Command      string   `arg:"" help:"Command for jobber server to run"`
-	Args         []string `arg:"" optional:"" help:"Arguments to command"`
+	Detach       bool `short:"d" help:"Detach from output when running" xor:"ts"`
+	NoTimestamps bool `short:"T" help:"Do not output timestamps on lines" xor:"ts"`
+
+	job.JobSpec
 }
 
 // CmdStop is a kong struct describing the flags and arguments for the
@@ -52,8 +53,8 @@ type CmdStatus struct {
 // `jobber list` subcommand.
 type CmdList struct {
 	clientCmd
-	All        bool `short:"a" help:"List all user's jobs"`
-	Terminated bool `short:"t" help:"List terminated as well as running jobs"`
+	All       bool `short:"a" help:"List all user's jobs"`
+	Completed bool `short:"c" help:"List completed as well as running jobs"`
 }
 
 // CmdLogs is a kong struct describing the flags and arguments for the
@@ -101,10 +102,30 @@ func (cmd *CmdRun) Run() error {
 	}
 	defer cmd.Close()
 
+	var iolims []*pb.DiskIOLimit
+	for _, iolim := range cmd.Resources.IO {
+		pblim := &pb.DiskIOLimit{
+			Device:    iolim.Device,
+			ReadBps:   iolim.ReadBPS,
+			WriteBps:  iolim.WriteBPS,
+			ReadIops:  iolim.ReadIOPS,
+			WriteIops: iolim.WriteIOPS,
+		}
+		iolims = append(iolims, pblim)
+	}
+
 	req := pb.RunRequest{
 		Spec: &pb.JobSpec{
-			Command:   cmd.Command,
-			Arguments: cmd.Args,
+			Command:        cmd.Command,
+			Arguments:      cmd.Args,
+			RootDir:        cmd.Root,
+			IsolateNetwork: cmd.IsolateNetwork,
+			Resources: &pb.Resources{
+				MaxProcesses: cmd.Resources.MaxProcesses,
+				MilliCpu:     cmd.Resources.CPU,
+				Memory:       cmd.Resources.Memory,
+				IoLimits:     iolims,
+			},
 		},
 	}
 
@@ -179,7 +200,7 @@ func (cmd *CmdList) Run() error {
 	}
 	defer cmd.Close()
 
-	req := pb.ListRequest{AllJobs: cmd.All, Terminated: cmd.Terminated}
+	req := pb.ListRequest{AllJobs: cmd.All, Completed: cmd.Completed}
 	resp, err := cl.List(context.Background(), &req)
 	if err != nil {
 		return err

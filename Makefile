@@ -10,7 +10,7 @@ REQUIRE_UPTODATE =
 
 ci: clean check-uptodate all  ## Full clean, build and up-to-date checks for CI
 
-all:  ## Nothing yet. Will be build, test, check coverage and lint
+all: build test lint  ## build, test and lint
 
 check-uptodate: proto tidy  ## Check that committed generated files are up-to-date
 	test -z "$$(git status --porcelain -- $(REQUIRE_UPTODATE))" || { git diff -- $(REQUIRE_UPTODATE); git status $(REQUIRE_UPTODATE); false; }
@@ -33,6 +33,9 @@ test: | $(O)
 
 tidy:  ## Tidy go modules with "go mod tidy"
 	go mod tidy
+
+lint:
+	golangci-lint run
 
 REQUIRE_UPTODATE += go.mod go.sum
 

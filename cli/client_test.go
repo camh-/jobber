@@ -6,6 +6,7 @@ import (
 	"net"
 	"testing"
 
+	"github.com/camh-/jobber/job"
 	"github.com/camh-/jobber/service"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
@@ -20,7 +21,7 @@ func TestClientAgainstFakeService(t *testing.T) {
 	require.NoError(t, err)
 
 	address := lis.Addr().String()
-	go grpcServer.Serve(lis)
+	go grpcServer.Serve(lis) //nolint:errcheck
 	defer grpcServer.Stop()
 
 	t.Run("run greeting", func(t *testing.T) {
@@ -28,7 +29,7 @@ func TestClientAgainstFakeService(t *testing.T) {
 		cmd := CmdRun{
 			clientCmd:    clientCmd{Address: address, output: w},
 			NoTimestamps: true,
-			Command:      "greeting",
+			JobSpec:      job.JobSpec{Command: "greeting"},
 		}
 		err := cmd.Run()
 		require.NoError(t, err)
@@ -44,8 +45,10 @@ Goodbye world
 		cmd := CmdRun{
 			clientCmd:    clientCmd{Address: address, output: w},
 			NoTimestamps: true,
-			Command:      "jack",
-			Args:         []string{"beanstalk"},
+			JobSpec: job.JobSpec{
+				Command: "jack",
+				Args:    []string{"beanstalk"},
+			},
 		}
 		err := cmd.Run()
 		require.NoError(t, err)
@@ -62,7 +65,7 @@ fum
 		cmd := CmdRun{
 			clientCmd:    clientCmd{Address: address, output: io.Discard},
 			NoTimestamps: true,
-			Command:      "invalid-command",
+			JobSpec:      job.JobSpec{Command: "invalid-command"},
 		}
 		err := cmd.Run()
 		require.Error(t, err)
@@ -140,9 +143,9 @@ red-01234569       May 27 12:24:06  mallory  running
 	t.Run("list all", func(t *testing.T) {
 		w := &bytes.Buffer{}
 		cmd := CmdList{
-			clientCmd:  clientCmd{Address: address, output: w},
-			All:        true,
-			Terminated: true,
+			clientCmd: clientCmd{Address: address, output: w},
+			All:       true,
+			Completed: true,
 		}
 		err := cmd.Run()
 		require.NoError(t, err)
