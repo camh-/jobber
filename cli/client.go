@@ -11,14 +11,17 @@ import (
 	"github.com/camh-/jobber/job"
 	pb "github.com/camh-/jobber/pb"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 )
 
 // client is a struct intended to be embedded in each of the client kong
 // subcommand structs and provides common options for all client commands,
 // as well as some methods for using those options.
 type clientCmd struct {
-	Address string `short:"A" default:"localhost:8080" env:"JOBBER_SERVER" help:"TCP address of jobber server"`
+	Address string `short:"A" default:"localhost:8443" env:"JOBBER_SERVER" help:"TCP address of jobber server"`
+
+	TLSCert string `name:"tls-cert" default:"certs/user.crt" help:"TLS user cert"`
+	TLSKey  string `name:"tls-key" default:"certs/user.key" help:"TLS user key"`
+	CACert  string `name:"ca-cert" default:"certs/ca.crt" help:"CA for authenticating server"`
 
 	conn   *grpc.ClientConn
 	output io.Writer
@@ -67,7 +70,11 @@ type CmdLogs struct {
 }
 
 func (c *clientCmd) connect() (pb.JobExecutorClient, error) {
-	opts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
+	creds, err := mTLSCreds(c.TLSCert, c.TLSKey, c.CACert)
+	if err != nil {
+		return nil, err
+	}
+	opts := []grpc.DialOption{grpc.WithTransportCredentials(creds)}
 	cc, err := grpc.Dial(c.Address, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("cannot dial %s: %w", c.Address, err)

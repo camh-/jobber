@@ -20,6 +20,13 @@ clean::  ## Remove generated files not to be committed
 
 .PHONY: all check-uptodate ci clean
 
+# --- Running ------------------------------------------------------------------
+
+run-server: certs/server.crt build
+	sudo $(O)/jobber serve --admin $(USER)
+
+.PHONY: run-server
+
 # --- Go -----------------------------------------------------------------------
 
 CMDS = .
@@ -28,7 +35,7 @@ GO_LDFLAGS = -X main.version=$(VERSION)
 build: | $(O)
 	go build -o $(O) -ldflags='$(GO_LDFLAGS)' $(CMDS)
 
-test: | $(O)
+test: testcerts | $(O)
 	go test -race ./...
 
 tidy:  ## Tidy go modules with "go mod tidy"
@@ -52,9 +59,73 @@ REQUIRE_UPTODATE += pb
 
 .PHONY: proto
 
+# --- Certificates -------------------------------------------------------------
+
+# Certs for locally running jobber
+
+CERTDIR = certs
+CERTSTRAP = certstrap --depot-path $(CERTDIR)
+
+$(CERTDIR)/ca.key $(CERTDIR)/ca.crt: | $(CERTDIR) install-certstrap
+	$(CERTSTRAP) init --common-name ca --expires "10 years" --curve P-256 --passphrase ""
+
+$(CERTDIR)/server.key $(CERTDIR)/server.crt: | $(CERTDIR)/ca.key $(CERTDIR) install-certstrap
+	$(CERTSTRAP) request-cert --common-name server --ip 0.0.0.0 --domain localhost --passphrase ""
+	$(CERTSTRAP) sign server --expires "3 months" --CA ca
+
+$(CERTDIR)/%.key $(CERTDIR)/%.crt: | $(CERTDIR)/ca.key $(CERTDIR) install-certstrap
+	$(CERTSTRAP) request-cert --common-name $* --passphrase ""
+	$(CERTSTRAP) sign $(USER) --expires "7 days" --CA ca
+
+default-user-cert: | $(CERTDIR)/$(USER).key  ## Set user "$(USER)" as default user cert
+	ln -nsf $(USER).key $(CERTDIR)/user.key
+	ln -nsf $(USER).crt $(CERTDIR)/user.crt
+
+
+# Certs for cli tests
+
+TCDIR = cli/testdata
+TESTCERTS = ca server user badca badserver baduser
+TCERTSTRAP = certstrap --depot-path $(TCDIR)
+
+testcerts: $(TESTCERTS:%=$(TCDIR)/%.key)
+
+$(TCDIR)/ca.key $(TCDIR)/ca.crt: | $(TCDIR) install-certstrap
+	$(TCERTSTRAP) init --common-name ca --expires "10 years" --curve P-256 --passphrase ""
+$(TCDIR)/server.key $(TCDIR)/server.crt: | $(TCDIR) $(TCDIR)/ca.key install-certstrap
+	$(TCERTSTRAP) request-cert --common-name server --ip 127.0.0.1 --domain localhost --passphrase ""
+	$(TCERTSTRAP) sign server --expires "3 months" --CA ca
+
+$(TCDIR)/user.key $(TCDIR)/user.crt: | $(TCDIR) $(TCDIR)/ca.key install-certstrap
+	$(TCERTSTRAP) request-cert --common-name user --passphrase ""
+	$(TCERTSTRAP) sign user --expires "7 days" --CA ca
+
+$(TCDIR)/badca.key $(TCDIR)/badca.crt: | $(TCDIR) install-certstrap
+	$(TCERTSTRAP) init --common-name badca --expires "10 years" --curve P-256 --passphrase ""
+$(TCDIR)/badserver.key $(TCDIR)/badserver.crt: | $(TCDIR) $(TCDIR)/badca.key install-certstrap
+	$(TCERTSTRAP) request-cert --common-name badserver --ip 127.0.0.1 --domain localhost --passphrase ""
+	$(TCERTSTRAP) sign badserver --expires "3 months" --CA badca
+
+$(TCDIR)/baduser.key $(TCDIR)/baduser.crt: | $(TCDIR) $(TCDIR)/badca.key install-certstrap
+	$(TCERTSTRAP) request-cert --common-name baduser --passphrase ""
+	$(TCERTSTRAP) sign baduser --expires "7 days" --CA badca
+
+$(CERTDIR) $(TCDIR):
+	@mkdir -p $@
+
+clean-certs::  ## Remove generated certificates
+	rm -rf $(CERTDIR) $(TCDIR)
+
+.PHONY: clean-certs default-user-cert testcerts
+
+
 # --- Utilities ----------------------------------------------------------------
 COLOUR_NORMAL = $(shell tput sgr0 2>/dev/null)
 COLOUR_WHITE  = $(shell tput setaf 7 2>/dev/null)
+
+install-certstrap: $(O)/bin/certstrap  ## install certstrap utility for generating certs
+$(O)/bin/certstrap:
+	go install github.com/square/certstrap@master
 
 help:  ## Display this help message
 	@echo 'Available targets:'
@@ -63,7 +134,7 @@ help:  ## Display this help message
 $(O):
 	@mkdir -p $@
 
-.PHONY: help
+.PHONY: help install-certstrap
 
 define nl
 

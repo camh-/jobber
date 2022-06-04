@@ -1,1 +1,6 @@
+/certs
+/cli/testdata/*.crl
+/cli/testdata/*.crt
+/cli/testdata/*.csr
+/cli/testdata/*.key
 /out

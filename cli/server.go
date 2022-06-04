@@ -6,6 +6,7 @@ import (
 
 	"github.com/camh-/jobber/job"
 	"github.com/camh-/jobber/service"
+	grpc_auth "github.com/grpc-ecosystem/go-grpc-middleware/auth"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 )
@@ -13,7 +14,12 @@ import (
 // CmdServe is a kong struct describing the flags and arguments for the
 // `jobber serve` subcommand.
 type CmdServe struct {
-	Listen string `short:"l" default:":8080" help:"TCP listen address"`
+	Listen string   `short:"l" default:":8443" help:"TCP listen address"`
+	Admin  []string `help:"admin users with full privileges"`
+
+	TLSCert string `name:"tls-cert" default:"certs/server.crt" help:"TLS server cert"`
+	TLSKey  string `name:"tls-key" default:"certs/server.key" help:"TLS server key"`
+	CACert  string `name:"ca-cert" default:"certs/ca.crt" help:"CA for authenticating users"`
 }
 
 // CmdRunJob is a hidden entrypoint just for testing the container runner
@@ -44,9 +50,18 @@ func (cmd *CmdServe) Run() error {
 	if err != nil {
 		return err
 	}
-	grpcServer := grpc.NewServer()
 
-	jobberService := service.NewJobExecutor(ProcSelfArgMaker)
+	creds, err := mTLSCreds(cmd.TLSCert, cmd.TLSKey, cmd.CACert)
+	if err != nil {
+		return err
+	}
+	grpcServer := grpc.NewServer(
+		grpc.Creds(creds),
+		grpc.UnaryInterceptor(grpc_auth.UnaryServerInterceptor(CNToUser)),
+		grpc.StreamInterceptor(grpc_auth.StreamServerInterceptor(CNToUser)),
+	)
+
+	jobberService := service.NewJobExecutor(ProcSelfArgMaker, cmd.Admin)
 	jobberService.RegisterWith(grpcServer)
 
 	reflection.Register(grpcServer)
