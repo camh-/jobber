@@ -10,7 +10,7 @@ REQUIRE_UPTODATE =
 
 ci: clean check-uptodate all  ## Full clean, build and up-to-date checks for CI
 
-all: build test lint  ## build, test and lint
+all: build test lint shlint integration-test  ## build, test, lint and integration-test
 
 check-uptodate: proto tidy  ## Check that committed generated files are up-to-date
 	test -z "$$(git status --porcelain -- $(REQUIRE_UPTODATE))" || { git diff -- $(REQUIRE_UPTODATE); git status $(REQUIRE_UPTODATE); false; }
@@ -22,10 +22,13 @@ clean::  ## Remove generated files not to be committed
 
 # --- Running ------------------------------------------------------------------
 
-run-server: certs/server.crt build
+run-server: certs/server.crt build  ## Run the server as root with current user as admin
 	sudo $(O)/jobber serve --admin $(USER)
 
-.PHONY: run-server
+integration-test: build testcerts  ## Run an integration test
+	./testscripts/integration.sh
+
+.PHONY: integration-test run-server
 
 # --- Go -----------------------------------------------------------------------
 
@@ -47,6 +50,16 @@ lint:
 REQUIRE_UPTODATE += go.mod go.sum
 
 .PHONY: tidy
+
+# --- Shell --------------------------------------------------------------------
+
+SHELLFILES = testscripts/integration.sh
+
+shlint:
+	shellcheck $(SHELLFILES)
+
+shfmt:
+	shfmt -w $(SHELLFILES)
 
 # --- Protobuf -----------------------------------------------------------------
 
@@ -85,7 +98,7 @@ default-user-cert: | $(CERTDIR)/$(USER).key  ## Set user "$(USER)" as default us
 # Certs for cli tests
 
 TCDIR = cli/testdata
-TESTCERTS = ca server user badca badserver baduser
+TESTCERTS = ca server user user2 badca badserver baduser
 TCERTSTRAP = certstrap --depot-path $(TCDIR)
 
 testcerts: $(TESTCERTS:%=$(TCDIR)/%.key)
@@ -99,6 +112,10 @@ $(TCDIR)/server.key $(TCDIR)/server.crt: | $(TCDIR) $(TCDIR)/ca.key install-cert
 $(TCDIR)/user.key $(TCDIR)/user.crt: | $(TCDIR) $(TCDIR)/ca.key install-certstrap
 	$(TCERTSTRAP) request-cert --common-name user --passphrase ""
 	$(TCERTSTRAP) sign user --expires "7 days" --CA ca
+
+$(TCDIR)/user2.key $(TCDIR)/user2.crt: | $(TCDIR) $(TCDIR)/ca.key install-certstrap
+	$(TCERTSTRAP) request-cert --common-name user2 --passphrase ""
+	$(TCERTSTRAP) sign user2 --expires "7 days" --CA ca
 
 $(TCDIR)/badca.key $(TCDIR)/badca.crt: | $(TCDIR) install-certstrap
 	$(TCERTSTRAP) init --common-name badca --expires "10 years" --curve P-256 --passphrase ""

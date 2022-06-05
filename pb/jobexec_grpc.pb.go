@@ -23,6 +23,7 @@ type JobExecutorClient interface {
 	List(ctx context.Context, in *ListRequest, opts ...grpc.CallOption) (*ListResponse, error)
 	Status(ctx context.Context, in *StatusRequest, opts ...grpc.CallOption) (*StatusResponse, error)
 	Logs(ctx context.Context, in *LogsRequest, opts ...grpc.CallOption) (JobExecutor_LogsClient, error)
+	Shutdown(ctx context.Context, in *ShutdownRequest, opts ...grpc.CallOption) (*ShutdownResponse, error)
 }
 
 type jobExecutorClient struct {
@@ -101,6 +102,15 @@ func (x *jobExecutorLogsClient) Recv() (*LogsResponse, error) {
 	return m, nil
 }
 
+func (c *jobExecutorClient) Shutdown(ctx context.Context, in *ShutdownRequest, opts ...grpc.CallOption) (*ShutdownResponse, error) {
+	out := new(ShutdownResponse)
+	err := c.cc.Invoke(ctx, "/JobExecutor/Shutdown", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // JobExecutorServer is the server API for JobExecutor service.
 // All implementations must embed UnimplementedJobExecutorServer
 // for forward compatibility
@@ -110,6 +120,7 @@ type JobExecutorServer interface {
 	List(context.Context, *ListRequest) (*ListResponse, error)
 	Status(context.Context, *StatusRequest) (*StatusResponse, error)
 	Logs(*LogsRequest, JobExecutor_LogsServer) error
+	Shutdown(context.Context, *ShutdownRequest) (*ShutdownResponse, error)
 	mustEmbedUnimplementedJobExecutorServer()
 }
 
@@ -131,6 +142,9 @@ func (UnimplementedJobExecutorServer) Status(context.Context, *StatusRequest) (*
 }
 func (UnimplementedJobExecutorServer) Logs(*LogsRequest, JobExecutor_LogsServer) error {
 	return status.Errorf(codes.Unimplemented, "method Logs not implemented")
+}
+func (UnimplementedJobExecutorServer) Shutdown(context.Context, *ShutdownRequest) (*ShutdownResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Shutdown not implemented")
 }
 func (UnimplementedJobExecutorServer) mustEmbedUnimplementedJobExecutorServer() {}
 
@@ -238,6 +252,24 @@ func (x *jobExecutorLogsServer) Send(m *LogsResponse) error {
 	return x.ServerStream.SendMsg(m)
 }
 
+func _JobExecutor_Shutdown_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ShutdownRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(JobExecutorServer).Shutdown(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/JobExecutor/Shutdown",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(JobExecutorServer).Shutdown(ctx, req.(*ShutdownRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // JobExecutor_ServiceDesc is the grpc.ServiceDesc for JobExecutor service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -260,6 +292,10 @@ var JobExecutor_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Status",
 			Handler:    _JobExecutor_Status_Handler,
+		},
+		{
+			MethodName: "Shutdown",
+			Handler:    _JobExecutor_Shutdown_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

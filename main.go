@@ -14,9 +14,10 @@ type config struct {
 	Version kong.VersionFlag `short:"V" help:"Print version information"`
 
 	// Server commands
-	Serve cli.CmdServe        `cmd:"" help:"Serve the JobExecutor gRPC service"`
-	Rc    cli.CmdRunContainer `cmd:"" hidden:""`
-	Rj    cli.CmdRunJob       `cmd:"" hidden:""`
+	Serve    cli.CmdServe        `cmd:"" help:"Serve the JobExecutor gRPC service"`
+	Shutdown cli.CmdShutdown     `cmd:"" help:"kill all jobs and shutdown server"`
+	Rc       cli.CmdRunContainer `cmd:"" hidden:""`
+	Rj       cli.CmdRunJob       `cmd:"" hidden:""`
 
 	// Client commands
 	Run    cli.CmdRun    `cmd:"" help:"Run a job on a remote jobber server"`
